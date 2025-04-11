@@ -1,0 +1,25 @@
+---
+title: "Les passager du titnic"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+# install.packages("titanic")  # Si ce n'est pas déjà fait
+library(titanic)
+train_set <- titanic_train
+test_set <- titanic_test
+```
+
+```{r}
+library(dplyr)
+library(tidyverse)
+
+```
+
+```{r}
+df <- bind_rows(train_set,test_set)
+df |> View()
+```
