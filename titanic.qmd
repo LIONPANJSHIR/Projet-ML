@@ -1,9 +1,22 @@
 ---
-title: "Les passager du titnic"
-format: html
+title: "Les passagers du Titanic"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    number-sections: true
+    code-fold: true          # cacher les chunks par défaut (avec bouton pour les afficher)
+    code-summary: "Afficher le code"  # bouton dans le HTML
+knitr:
+  opts_chunk:
+    echo: false              # cache le code R
+    message: false           # cache les messages
+    warning: false           # cache les warnings
+    error: false             # cache les erreurs
 editor: visual
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r}
@@ -16,10 +29,1192 @@ test_set <- titanic_test
 ```{r}
 library(dplyr)
 library(tidyverse)
+library(forcats)
+library(showtext)
+library(hrbrthemes)
+library(rcompanion)
+library(scales)
+```
+
+```{r}
+df <- bind_rows(train_set,test_set) # combiner les deux données pour former un seul data set
+df <- df |> 
+  mutate(
+    Survived = as_factor(Survived),
+    Survie_Na = fct_explicit_na(Survived,"Informations inconnues")
+  )
+```
+
+```{r}
+
+
+# Remplace les chemins par ceux que tu trouves dans font_files()
+font_add("Segoe",    "C:/Windows/Fonts/segoeui.ttf")
+font_add("Times New Roman",    "C:/Windows/Fonts/times.ttf")
+font_add("Georgia",  "C:/Windows/Fonts/georgia.ttf")
+# font_add("Garamond", "C:/Windows/Fonts/garamond.ttf")
+font_add("Calibri","C:/Windows/Fonts/calibri.ttf" )
+showtext_auto()
+
+
+# font_files()
+bf <- "Calibri"
+tf <- "Times New Roman"
+theme <-   theme_ipsum(base_family = bf,plot_title_family = tf)
+
+
+ggt <- geom_text(stat="count",
+            aes(
+              label=scales::percent(
+                                    after_stat(count)/nrow(df)
+                                    )
+              ),
+            vjust=-0.5
+            )
+```
+
+```{r}
+
+# table(df$Parch)
+# table(df$SibSp)
+df <- df |> mutate(across(c(Survived, Pclass, Sex, Embarked), as.factor))
+
+# colnames(df) 
+```
+
+# Présentation
+
+Cette étude s’inscrit dans le cadre d’un projet d’analyse de données portant sur le naufrage du **`Titanic`**, l’un des accidents maritimes les plus marquants du XXe siècle. À partir d’un jeu de données rendu célèbre par la plateforme **`Kaggle`**, contenant des informations détaillées sur les passagers (âge, sexe, classe sociale, prix du billet, embarquement, etc.), l’objectif est de **mener une analyse exploratoire approfondie** afin de comprendre **les facteurs ayant influencé la probabilité de survie**.\
+
+L’enjeu est double : d’une part, **identifier des liens statistiques entre certaines caractéristiques individuelles et la survie** (via tests d’indépendance, visualisations, mesures d’asymétrie, etc.) ; d’autre part, **développer un modèle de classification supervisée** capable de **prédire si un passager aurait survécu ou non** à partir de ses attributs.\
+
+Ce projet permet ainsi de combiner une approche **exploratoire, statistique et prédictive**, tout en illustrant des problématiques réelles d’inégalités sociales, de logistique de sauvetage et de modélisation en Machine Learning
+
+![](images/clipboard-1996632301.png){width="949"}
+
+## Description du jeu de donnée
+
+Ce jeu de données est composé de **1309 observations** et de **12 variables**, dont :
+
+-   **2 variables de type caractère** : `Name` et `Cabin`
+-   **5 variables catégorielles** : `Pclass`, `Survived`, `Sex`, `Embarked`, et `Ticket` (selon traitement)
+-   **2 variables numériques continues** : `Age` et `Fare`
+-   **2 variables numériques discrètes** : `SibSp` et `Parch`
+-   **1 identifiant** : `PassengerId` (non utilisé pour l’analyse)
+
++---------------+---------------------------------------------------------------------------------+
+| Variables     | Explication                                                                     |
++===============+=================================================================================+
+| `PassengerId` | |                                                           |                   |
+|               | |-----------------------------------------------------------|                   |
+|               | | Identifiant unique pour chaque passager (numéro de ligne) |                   |
++---------------+---------------------------------------------------------------------------------+
+| `Survived`    | **Statut de survie** : `1 = a survécu`, `0 = décédé`                            |
++---------------+---------------------------------------------------------------------------------+
+| `Pclass`      | **Classe du billet** (catégorie socio-éco) : `1 = 1ère`, `2 = 2ème`, `3 = 3ème` |
++---------------+---------------------------------------------------------------------------------+
+| `Name`        | Nom complet du passager (inclut le titre : Mr., Mrs., etc.)                     |
++---------------+---------------------------------------------------------------------------------+
+| `SEX`         | **Sexe** du passager                                                            |
++---------------+---------------------------------------------------------------------------------+
+| `Age`         | **Âge** du passagers                                                            |
++---------------+---------------------------------------------------------------------------------+
+| `Sibsp`       | Nombre de frère et sœur et/ou de conjoint a bord                                |
++---------------+---------------------------------------------------------------------------------+
+| `parch`       | Nombre de **parents et/ou enfants** a bord                                      |
++---------------+---------------------------------------------------------------------------------+
+| `Ticket`      | Numéro de **billet**                                                            |
++---------------+---------------------------------------------------------------------------------+
+| `Fare`        | **Tarif payé pour le billet en £**                                              |
++---------------+---------------------------------------------------------------------------------+
+| `Cabin`       | Numéro de **cabine**                                                            |
++---------------+---------------------------------------------------------------------------------+
+| `Embarked`    | Port d'**embarquement**                                                         |
+|               |                                                                                 |
+|               | -   `C = Cherbourg`                                                             |
+|               |                                                                                 |
+|               | -   `Q = Queenstown`                                                            |
+|               |                                                                                 |
+|               | -   `S = Southampton`                                                           |
++---------------+---------------------------------------------------------------------------------+
+
+```{r}
+# library(echarts4r)
+# 
+# # Créer la table des classes avec les variables
+# Class <- as.data.frame(sapply(df, class)) |>
+#   rownames_to_column(var = "Variable") |>
+#   rename(Classe = `sapply(df, class)`)
+# 
+# # Résumé avec noms de variables concaténés
+# summary_class <- Class |>
+#   group_by(Classe) |>
+#   summarise(
+#     count = n(),
+#     Variables = paste(Variable, collapse = ", ")
+#   )
+# 
+# # Création du graphique avec tooltip custom
+# summary_class |> ungroup() |>
+#   e_charts(Classe) |>
+#   e_bar(
+#     count,
+#     name = "Nombre de variables",
+#     colorBy="data") |>
+#   e_tooltip(trigger = "axis"
+#     # formatter = htmlwidgets::JS("
+#     #   function(params) {
+#     #     return '<b>Classe :</b> ' + params.name + '<br/>' +
+#     #            '<b>Nombre :</b> ' + params.value + '<br/>' +
+#     #            '<b>Variables :</b> ' + params.data.Variables;
+#     #   }
+#     # ")
+#  )
+
+```
+
+# EDA
+
+Après avoir décrit la structure et le contenu du jeu de données, nous allons maintenant procéder à une **analyse exploratoire des données** (EDA), afin de mieux comprendre les principales tendances, distributions, et relations entre les variables.
+
+```{r,fig.cap= "{Table-1} Table des 10 1er valeurs du jeu de données"}
+library(kableExtra)
+df |> head(10) |> 
+  kbl(
+    caption = "Présentation du jeu de données"
+    # format = "rst"
+    
+  )|> 
+  kable_styling() |>
+  column_spec(column = 2,
+              background = "#FFFABC",
+              color = "black") |> 
+  row_spec(row = 0,
+           underline = TRUE,
+           italic = T)
+```
+
+Y'a-t-il des données manquantes ?
+
+Avant de procéder à l’analyse ou à la modélisation, il est essentiel d’identifier la présence de **valeurs manquantes** dans le jeu de données.\
+
+Le graphique ci-dessous permet de **visualiser rapidement les variables concernées par des données manquantes**, ainsi que leur **proportion relative**.\
+
+Cette étape est indispensable pour anticiper les traitements nécessaires en phase de préparation des données.
+
+```{r,fig.cap= "figure :2 : Tableau récapitulatif des valeurs manquantes par variables"}
+library(naniar)
+gg_miss_var(df) +
+  labs( y ="Nombres de valeurs manquantes",
+        title = "Tableau des valeurs manquantes par variables")+
+  theme+
+  theme(plot.title.position = "plot")
+```
+
+La variable `Survivant ,Age et Fare` possèdent des valeurs manquantes respectivement (418,263 et 1) le fait d'avoir des données manquantes peut être problématique dans le sens ou si on ne gère pas ces données manquantes on risquerait de perdre des informations car ces valeurs manquantes touche 52,1% des données .
+
+Nous allons voir plus en détails comment géré ses valeurs manquantes .
+
+### Résume statstatistiques des variables **`Fare`** (Prix du billet ) et `Age`
+
+Un **résumé statistique** permet de mettre en évidence les **tendances centrales** (telles que la moyenne et la médiane) de chaque variable et les mésure de disperesion (variance , écart-type) tout en donnant une première idée de la **distribution des données**.\
+
+Il permet également de détecter la **dispersion**, les **asymétries** éventuelles, ainsi que la **présence de valeurs aberrantes** (outliers) qui pourraient influencer les analyses futures.
+
+```{r}
+library(gt)
+TB <- psych::describe(df |> select(Age , Fare))
+TB[,1] <- colnames(df |> select(Age , Fare))
+
+# Renommer les colonnes en français
+colnames(TB) <- c("Variable", "Nb_obs", "Moyenne", "Écart_type", "Médiane", "Tr_Moyenne","mad",
+                   "Minimum", "Maximum", "Étendu","Asymétrie", "Curtosis", "SE")
+
+Color <- c("#FDE725FF", "#21908CFF")
+
+TB |> 
+  select(- Nb_obs) |> 
+  mutate(across(where(is.numeric),round,digits=2 )) |>
+  gt() |> 
+  tab_header(title = md("*Résumé statistiques des variable numerique continue*")) |> 
+  tab_style(
+    locations = cells_body(
+      columns = "Variable",
+      rows = everything()
+    ),
+    style = cell_fill(color=Color[2])
+  ) |> 
+  # tab_style(
+  #   locations = cells_body(
+  #     columns = everything(),
+  #     rows = 2
+  #   ),
+  #   style = cell_fill(color=Color[1])
+  # ) |> 
+  tab_footnote(
+    locations = list(cells_column_labels(columns = "Curtosis")),
+     footnote = md("**Aplatissement de la distribution** : \n
+    - Valeur proche de 0 : Distribution normale. \n
+    - Valeur > 0 : Distribution plus pointue. \n
+    - Valeur < 0 : Distribution plus aplatie. \n "
+  ) )|> 
+   tab_footnote(
+    locations = cells_column_labels(columns = "Tr_Moyenne"),
+    footnote = md("**La moyenne tronquée est une moyenne calculée après avoir supprimé 
+    un certain pourcentage des valeurs extrêmes** (les plus grandes et les plus petites)")
+  ) |>  tab_footnote(
+    locations = cells_column_labels(columns = "mad"),
+    footnote = md("**Mediane des ecart a la médiane** \n
+    - Un mad élevé signifie une forte dispersion autour de la médiane.\n
+    - Un mad proche de 0 indique que les valeurs sont très regroupées autour de la médiane.")
+  )
+
+```
+
+Le tableau ci-dessous nous indique que **l’âge moyen des passagers est de 29,88 ans**. Le plus jeune avait **2 mois**, tandis que le plus âgé avait **80 ans**.\
+La distribution de l’âge semble **relativement équilibrée**, avec une **asymétrie modérée à droite (skewness = 0,41)** et une **kurtosis de 0,13**, ce qui suggère une forme **proche d’une distribution normale**, sans aplatissement ou concentration excessifs.
+
+Concernant la variable **`Fare` (prix des billets)**, la **moyenne est de 33,30 £**, avec un **écart-type élevé de 51,76 £**, ce qui pourrait laisser penser à une forte dispersion.\
+Cependant, cette dispersion apparente est principalement due à la présence de **valeurs aberrantes** (très gros montants). Cela est confirmé par le fait que la **moyenne tronquée** (c’est-à-dire la moyenne calculée après exclusion des valeurs extrêmes) chute à **21,57 £**, soit une **différence notable de plus de 11 £** avec la moyenne classique.
+
+De plus, la distribution de `Fare` est **très asymétrique à droite** (**skewness = 4,31**) et **extrêmement `leptokurtique`** (**kurtosis = 26,87**), ce qui indique une **concentration élevée autour des petits montants** et la présence de **billets très coûteux** (jusqu’à **512,33 £**) qui déforment la moyenne.\
+Ainsi, bien que l’écart-type soit élevé, la variabilité réelle perçue pour la majorité des passagers est **moins importante** que ce que la moyenne brute laisse entendre.
+
+## Analyse individuel des variables
+
+### La variable **`Sex`**
+
+Commençons avec le genre des passagers, passons en revue la répartition du genre en fonction des passagers :
+
+On observe que 36% des passagers sont des femmes et 64 % des hommes
+
+```{r}
+
+
+df |> 
+  count(Sex) |> 
+  mutate(prop = n / sum(n)) |> 
+  ggplot(aes(x = "", y = prop, fill = Sex)) +
+  geom_col(width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  scale_fill_viridis_d()+
+  geom_text(aes(label = percent(prop, accuracy = 1)),
+            position = position_stack(vjust = 0.5), color = "white", fontface = "bold") +
+  labs(title = "Répartition des sexes parmi les passagers",
+       x = NULL, y = NULL) +
+  theme_void() +
+  theme(legend.position = "right")
 
 ```
 
 ```{r}
-df <- bind_rows(train_set,test_set)
-df |> View()
+ # colSums(is.na(df))/ nrow(df) |> round(digits = 3)
+# is.na(df) |> sum() /nrow(df)
+```
+
+```{r}
+# str(df)
+
+```
+
+### Analyse partielle de variable **`Survived`**
+
+```{r}
+library(showtext)
+
+showtext_auto()
+```
+
+La variable **`Survived`** constitue la **variable cible** de notre étude, celle que nous chercherons à **prédire dans les analyses futures**. Elle indique si un passager a **survécu (`1`)** ou **non (`0`)** au naufrage du **`Titanic`**.\
+
+Le graphique ci-dessous illustre la **répartition des passagers selon leur statut**, permettant ainsi d’avoir une **première vue d’ensemble sur l’équilibre ou le déséquilibre** de cette variable cible dans l’échantillon
+
+```{r,fig.cap="Figure 2 : Répartition des passagers selon leur statut"}
+
+
+
+df |> 
+  mutate(
+    Survived = case_when(
+      Survived == 1 ~ "Survivants",      
+      Survived == 0 ~ "Décédés",
+      TRUE ~ NA_character_
+    ),
+    Survived = fct_explicit_na(Survived, na_level = "Informations manquantes"),
+    Survived = fct_reorder(Survived, Survived, .fun = function(x) length(x), .desc = TRUE)  # ordre croissant
+  ) |>
+  ggplot(aes(x = Survived, fill = Survived)) +
+  geom_bar() +
+  # scale_fill_brewer(palette = "Dark2") +
+  scale_fill_viridis_d()+
+  labs(
+    title = "Répartition des statuts des passagers ", 
+    x = "Statut", 
+    y = "Nombre",
+    fill="Statut "
+  ) +
+   geom_text(stat = "count", aes(label =scales::percent( after_stat(count)/nrow(df))), vjust = -0.5) +  # 🏷️ labels automatiques  
+  theme_ipsum(base_family = "serif")
+  
+
+# 
+# idis::viridis_pal()(10)
+#  [1] "#440154FF" "#482878FF" "#3E4A89FF"
+#  [4] "#31688EFF" "#26828EFF" "#1F9E89FF"
+#  [7] "#35B779FF" "#6DCD59FF" "#B4DE2CFF"
+# [10] "#FDE725FF"
+# 
+#  "#A1307EFF" "#BB3878FF" "#D3436EFF"
+#  [4] "#E85362FF" "#F66C5CFF" "#FC8A62FF"
+#  [7] "#FEA872FF" "#FEC488FF" "#FDE1A2FF"
+# [10] "#FCFDBFFF"
+
+Colors <- c( "#440154FF","#35B779FF","#FDE725FF","#FCFDBFFF","#FC8A62FF")
+```
+
+Lors de la décompte on observe que 41.9 % des passagers sont décédés ,26.1% sont des survivants.
+
+Pour **le reste des individus**, aucune information sur leur sort n’est disponible. Il est donc probable qu’ils soient **portés disparus** ou que l’information ait été **non collectée ou perdue**, ce qui justifie leur traitement en tant que **valeurs manquantes ou indéterminées** dans les analyses à venir.
+
+#### Analyse préliminaire de la variable `Age` :
+
+Comme mentionné précédemment, l’**âge moyen des passagers est de 29,88 ans**, avec un **écart-type de 14,41 ans**, ce qui indique une **dispersion modérée** autour de la moyenne.\
+
+La distribution semble **centrée**, traduisant une certaine **symétrie autour de la valeur centrale**, mais on observe néanmoins la présence de **valeurs atypiques**, notamment au-delà de **70 ans**.\
+
+Ces **valeurs extrêmes** sont visibles sur la figure 3
+
+```{r,message=FALSE,warning=FALSE,fig.cap="Figure 3 : Distribution des ages parmis les passagers du titanic"}
+library(e1071)
+
+skew <- skewness(df$Age, na.rm = TRUE)
+kurt <- kurtosis(df$Age, na.rm = TRUE)
+moy <- mean(df$Age,na.rm = TRUE)
+
+df |> ggplot(aes(x=Age))+
+  geom_histogram(bins=30,alpha=0.8,fill=Colors[1])+
+  geom_vline(
+    aes(xintercept = moy,
+        color="Moyenne"),
+        linetype="dashed",
+        linewidth=0.6
+    )+
+  scale_color_manual(
+    name ="Légende",
+    values = c("Moyenne"="black" )
+    )+
+  annotate("text", x = 50, y = 80, label = paste0("Skewness : ", round(skew, 2)), hjust = 0, size = 4)+ 
+  annotate("text", x = 50, y = 75, label = paste0("Kurtosis : ", round(kurt, 2)), hjust = 0, size = 4)+
+  annotate("text",x = moy + 10, y = 120 , label=paste0(round(moy,2),"ans"))+
+  labs(y= "Nombre de personnes",
+       title = "Distribution des âges des passagers du titanic")+
+  theme_ipsum(base_family = "Georgia",plot_title_family = "Times New Roman")
+  # annotate("text",x = 25,y=90,label="Moyenne")
+
+
+```
+
+Intéressons-nous maintenant à la variable **`Pclass`**, qui représente la classe du billet acheté par chaque passager comme évoqué en introduction, cette variable est comparable aux classes dans un avion : les passagers de 1re classe bénéficient de meilleures conditions et paient un tarif élevé, tandis que ceux des classes inférieures (2e et 3e) accèdent à des services plus restreints pour un prix plus abordable.
+
+La variable **`Pclass`** est une variable catégorielle ordinale comportant trois niveaux : 1, 2 et 3, correspondant respectivement aux 1re, 2e et 3e classes. Le graphique ci-dessous illustre la répartition des passagers par classe, et permet d’observer la proportion relative de chaque catégorie dans l’échantillon.
+
+```{r}
+
+df |> ggplot(aes(x=Pclass))+
+  geom_bar(aes(fill=Pclass))+
+  scale_fill_viridis_d()+
+  labs(y="Nombre de personnes",
+       title = "Répartition des class en fonction des passagers",
+       x="Classe")+
+  theme_ipsum(base_family = "Georgia",plot_title_family = "Times New Roman")+
+  geom_text(
+    stat = "count",
+    aes(label=scales::percent(after_stat(count)/nrow(df))),
+    vjust=-0.5 
+    )
+```
+
+La majorité des passagers se trouvent dans la **3e classe**, qui représente **54,3 %** de l’échantillon total.\
+Ce résultat n’est pas surprenant : comme évoqué dans l’analyse de la variable `Fare`, les prix des billets sont **fortement concentrés autour des faibles valeurs**, ce qui s’explique par une **asymétrie très marquée à droite** (skewness élevée et positive). Cette concentration autour des petits montants correspond typiquement à des **billets de 3e classe**, proposés à des tarifs plus accessibles, tandis que les **valeurs extrêmes** observées dans la distribution (prix supérieurs à 200 £) concernent probablement les **billets de luxe** de 1re classe ou 2e classe . La **2e classe** représente **21,2 %** des passagers, tandis que la **1re classe** en regroupe **24,7 %**, ce qui reflète une répartition relativement cohérente avec les différences de prix et de services offerts entre les classes sociales à bord du **`Titanic`**
+
+Ces différences de classes se reflètent logiquement dans les prix des billets, que nous allons maintenant analyser plus en détail à travers la variable Fare.
+
+### Analyse de la variable **`Fare`** 
+
+Le **prix du billet** (`Fare`) constitue un **indicateur socio-économique essentiel** dans l’analyse du naufrage du Titanic.\
+En effet, le montant payé déterminait **la classe du billet**, et donc **la zone d’hébergement à bord du navire**. Or, qui dit **zone différente** dit aussi **accès inégal aux structures de sauvetage**, notamment en fonction de la proximité aux canots ou aux ponts supérieurs.
+
+```{r}
+
+
+library(e1071)
+
+skew <- skewness(df$Fare, na.rm = TRUE)
+kurt <- kurtosis(df$Fare, na.rm = TRUE)
+
+df |> ggplot(aes(x=Fare))+
+  geom_histogram(bins=30,fill=Colors[1],alpha=0.9)+
+  geom_vline(
+          aes(
+              xintercept = mean(Fare,na.rm=T),
+              colour="Moyenne"
+             ),
+          linetype="dashed",
+          linewidth=0.8
+            )+
+  annotate("text", x = 300, y = 380, label = paste0("Skewness : ", round(skew, 2)), hjust = 0, size = 4)+
+  annotate("text", x = 300, y = 355, label = paste0("Kurtosis : ", round(kurt, 2)), hjust = 0, size = 4)+
+  labs(x="Prix du billet",
+       y="Nombre de personnes",
+       title = "Répartition des prix des billets (en £) du titanic",
+       colour="")+
+  scale_x_continuous(labels = scales::label_dollar(prefix = "",suffix = "£"))+
+  theme +
+   scale_color_manual(
+    name ="Légende",
+    values = c("Moyenne"="black")
+    )+
+  annotate("text",x=75,y=400,label=paste(round(mean(df$Fare,na.rm = T),3),"£"),color="red")
+```
+
+Le graphique ci-dessus illustre la **distribution des prix des billets**, révélant une **forte fragmentation socio-économique** parmi les passagers.\
+On observe que la majorité des billets sont fortement concentrés autour de **20 ou de la moyenne £**, ce qui correspond vraisemblablement aux **passagers de 3e classe**.\
+Cependant, certains billets atteignent des montants bien plus élevés, allant jusqu’à **512,33 £**, laissant supposer que ces passagers bénéficiaient de **services de luxe**, de **cabines spacieuses**, voire d’un **statut privilégié à bord**.
+
+Afin de mieux comprendre le profil des passagers, il est pertinent de s'intéresser également à la variable `Embarked`, qui indique **le port d'embarquement**. Celle-ci pourrait être liée **au prix du billet**, voire à la **classe sociale** des passagers
+
+### Mise en lumière de la variable **`Embarked`**
+
+Lors de sa traversée, le Titanic a effectué deux escales après son départ de **Southampton** : la première à **Cherbourg**, en **Normandie (France)**, et la seconde à **Queenstown**, en **Irlande**. Le graphique ci-dessous illustre la **répartition des passagers selon leur port d’embarquement**, ce qui permet de visualiser la contribution de chaque escale à la composition globale des passagers à bord.
+
+```{r}
+df <- df |> 
+  mutate(
+    Embarked= if_else(Embarked=="",NA_character_,Embarked)
+  )
+
+df |> mutate(Embarked = fct_explicit_na(Embarked,"Inconnue")) |> 
+  ggplot(
+    aes(
+      x=fct_reorder(Embarked,Embarked,.fun=function(x)length(x),.desc = T),
+      fill=Embarked)) +
+  geom_bar()+
+  scale_fill_viridis_d(
+    name="Port d'embarquement",
+    label=c(
+        "C" = "Cherbourg",
+        "Q" = "Queenstown",
+        "S" = "Southampton"
+)
+  )+
+  labs(x="Port",
+       y="Nombre de personnes",
+       title="Répartitions des port d'embarquement en fonction des passagers"
+       )+
+  ggt+
+   theme  
+
+```
+
+Il est tout à fait naturel d’observer une **forte concentration des embarquements à Southampton**, puisque c’est depuis ce port que le Titanic a **débuté sa traversée**. En effet, près de **70 % des passagers ont embarqué à Southampton**, contre **23 % à Cherbourg** (en France), et seulement **9 % à Queenstown** (en Irlande), qui constituait la dernière escale avant la traversée de l’Atlantique
+
+```{r}
+
+df |> 
+  group_by(`Nombre de parents et/ou enfants a bord`=Parch) |> 
+  summarise(
+    Effectif = n(),
+    Proportion = paste(round(Effectif / nrow(df),3)*100,"%")
+                ) |> reactable::reactable()
+```
+
+Parmi les passagers du `Titanic` 76.5 % voyage sans leurs enfants et ou leurs parents contre 13% qui voyage avec un seul parent ou enfant
+
+```{r}
+df |> 
+  group_by(`Nombre de  frère ou sœur et/ou de conjoint a bord`= SibSp) |>
+  mutate(`Nombre de  frère ou sœur et/ou de conjoint a bord` =case_when(
+    SibSp > 2 ~"+2",
+    SibSp==1 ~ "1",
+    SibSp == 2 ~ "2",
+    SibSp ==0 ~"0"
+  )) |> 
+   summarise(
+    Effectif = n(),
+    Proportion = paste(round(Effectif / nrow(df),3)*100,"%")
+                ) |> 
+  arrange(desc(Effectif)) |> 
+reactable::reactable()
+```
+
+68,1 % des passagers voyageaient sans conjoint ni frère ou sœur, contre 24,4 % accompagnés d’un proche familial (frère, sœur ou conjoint)
+
+## Analyse bivariée
+
+```{r}
+df <-df |> mutate(
+  Categorie_age = case_when(
+    Age >=0 & Age < 12 ~ "Enfant",
+    Age >=12 & Age < 19 ~ "Adolescents",
+    Age >= 19 & Age < 26 ~ "Jeune adulte",
+    Age >= 26 & Age < 60 ~ "Adulte",
+    Age >= 60 ~ "Senior",
+    TRUE ~ NA_character_
+    
+  ),
+  Categorie_age = as.factor(Categorie_age)
+)
+```
+
+```{r}
+# table(df$Categorie_age,useNA = "ifany")
+# 
+# reactable::reactable(
+#   df |> 
+#     group_by(
+#       `Tranche d'age`=fct_explicit_na(Categorie_age,"Inconnu")
+#       ) |> 
+#     summarise(`Nombre de personnes` =n()) |> 
+#     arrange(desc(`Nombre de personnes`))
+#   # )
+```
+
+### **“Les femmes et les enfants d'abord” : une règle respectée à bord du `Titanic` ?**
+
+En situation de crise, il est fréquent que **les femmes et les enfants soient prioritaires lors des évacuations**, et le cas du `Titanic` ne fait pas exception à cette règle.
+
+Le graphique ci-dessous nous montre que, **parmi les passagers ayant survécu**, **68,1 % étaient des femmes** contre **31,9 % d’hommes** (en ne considérant que les données connues).
+
+À l’inverse, **parmi les passagers décédés**, **85,2 % étaient des hommes**, et seulement **14,8 % étaient des femmes**, ce qui suggère un **fort déséquilibre selon le sexe**.
+
+```{r}
+A <- df |>
+  filter(!is.na(Survived)) |> 
+  count(Sex , Survie_Na) |> 
+  group_by(Survie_Na) |> 
+  mutate(Total = sum(n),
+         percent = n/ Total) |> 
+  ggplot(aes(x = Sex ,y = n ,fill =Survie_Na))+
+  geom_col()+
+  scale_fill_viridis_d(name = "Statut")+
+  theme+
+  labs(subtitle="La repartion du statut en fonction du genre",
+       y = "Nombre de personnes" ,
+       title= "",
+       x =" Genre")+
+  geom_text(aes(
+                label = scales::percent(percent)
+                ) ,
+            position = position_stack (vjust=0.5) , color = "white",
+            fontface="bold.italic" , 
+            family = "serif"
+  )+
+  theme(legend.position="top")
+
+
+
+B <-  df |>
+  filter(Survie_Na %in% c( 1,0)) |> 
+  count(Sex , Survie_Na) |> 
+  group_by(Sex) |> 
+  mutate(Total = sum(n),
+         percent = n/ Total) |> 
+  ggplot(aes(x = Sex ,y = n ,fill =Survie_Na))+
+  geom_col()+
+  scale_fill_viridis_d(name = "Statut")+
+  theme+
+  labs(subtitle="La repartion du genre en fonction du statut",
+       y = "Nombre de personnes" ,
+       title="",
+       x =" Genre")+
+  geom_text(aes(
+                label = scales::percent(percent)
+                ) ,
+            position = position_stack (vjust=0.5) , color = "white",
+            fontface="bold.italic" , 
+            family = "serif"
+  )+
+  theme(legend.position="top")
+     
+library(gridExtra)
+grid.arrange(A,B,ncol=2)
+           
+```
+
+Une question se pose alors :\
+*Ce déséquilibre s'explique-t-il par le fait que les hommes étaient majoritaires à bord du **`Titanic`**, ou bien reflète-t-il une inégalité réelle face à la survie ?*
+
+Pour répondre rigoureusement à cette question, nous allons utiliser un **test du khi² d’indépendance**, afin de déterminer si le **sexe et la survie sont statistiquement liés** ou si la différence observée pourrait être due au hasard puis nous allons mesure
+
+```{r}
+
+# B <-  df |>
+#   filter(Survie_Na %in% c( 1,0)) |> 
+#   count(Sex , Survie_Na) |> 
+#   group_by(Sex) |> 
+#   mutate(Total = sum(n),
+#          percent = n/ Total)
+cat("le test de khi-deux nous renvoie : \n")
+cat("------------------------------------------------------------------------------------")
+chisq.test(table(df$Survived,df$Sex)) # Elle sert a quantifier la force du lien entre deux variables catégorielles
+cat("------------------------------------------------------------------------------------\n")
+cat("Et le V de cramer est de " ,as.numeric(cramerV(table(df$Survived,df$Sex))))
+
+```
+
+Le **test du Chi²** a révélé une **association statistiquement significative** entre le **sexe des passagers** et leur **probabilité de survie** (χ² = 257,27 ; p-value \< 2.2e-16). De plus, l’**indice de V de Cramér**, égal à **0,54**, indique une **association forte** entre ces deux variables. Cela suggère que le **sexe constitue un facteur déterminant** dans les chances de survie lors du naufrage du Titanic.
+
+En appui à ces résultats statistiques, le **graphique ci-dessous** met en évidence un **déséquilibre marqué entre les proportions d’hommes et de femmes** dans les différentes **tranches d’âge** : les femmes sont globalement **sous-représentées** dans toutes les catégories. Toutefois, le second graphique montre que, **quel que soit l’âge**, les **femmes présentent un taux de survie systématiquement plus élevé** que les hommes. Cette observation visuelle renforce l’hypothèse selon laquelle les **femmes ont été priorisées** lors de l’évacuation, en application du principe du **"women and children first"**, historiquement documenté pendant le naufrage.
+
+```{r}
+library(ggtext)
+A <- df |> 
+  count(Categorie_age,Sex) |> 
+  group_by(Categorie_age) |> 
+  mutate(Total = sum(n),
+         percent = n/Total) |> 
+  ggplot(aes(x = Categorie_age , y=n ,fill=Sex)) + 
+  geom_col()+
+  # facet_grid(Survived ~.)+
+    geom_text(
+    aes(label = scales::percent(percent, accuracy = 1)),
+    position = position_stack(vjust = 0.5),
+    color = "gray65",
+    size =4
+  )+
+  scale_fill_viridis_d()+
+   labs(subtitle = "Répartition des tranches d’âge selon le sexe des passagers " ,
+       y = "Nombres de personnes " , 
+       title = "Comparaison de la répartition des passagers et des survivants selon l'âge et le sexe",
+       x ="Tranche d'âge")+
+  theme+
+  theme(legend.position="top")
+
+
+B <- df |> 
+  filter(Survived == 1 )|>
+  count(Sex , Categorie_age , Survived) |> 
+  group_by(Categorie_age) |> 
+  mutate(Total = sum(n) , 
+         percent = n / Total) |> 
+  ggplot(aes( x = Categorie_age , y = n ,fill = Sex))+
+  geom_col()+
+  theme +
+  scale_fill_viridis_d(name = "Genre") +
+  labs(subtitle = "Structure des survivants par genre et tranche d’âge " ,
+       title="",
+       y = "Nombres de personnes " , 
+       x ="Tranche d'âge")+
+  geom_text( aes(label = scales::percent(percent) ),
+            position = position_stack (vjust=0.6) , color = "gray65",
+            fontface="bold.italic" , 
+            family = "serif" ,
+            size =4) + 
+   theme(
+    legend.position = "top",
+  )
+
+
+grid.arrange(A,B,ncol = 2)
+
+```
+
+```{r}
+df |> ggplot(aes(x=Fare,fill=Survie_Na))+
+  geom_density(aes(y=..density..),alpha=0.6)+
+  scale_fill_viridis_d(name="Statut")+
+  labs(y="Densité ",
+       x= "Prix du billet",
+       title = " Distribution de la densité du prix des billets en fonction du statut des passagers")+
+  theme 
+```
+
+-   Les distribution sont assez identique elles suivent toute la même tendance :
+    -   La plupart des billets ont étaient achetés autour de 25£ car c'est le prix auquel la densité est maximal
+    -   Un deuxième pic (moins importante que la 1er ) est observé aux alentour de 75£
+    -   Ont observe également des valeurs extrême des billets qui ont étaient vendus a + 200 £
+
+```{r}
+# table(df$Cabin=="")
+df <- df |> 
+  mutate(Cabin = if_else(Cabin=="",NA_character_,Cabin))
+```
+
+# [Test statistique]{.underline}
+
+Dans cette partie nous allons faire des test de significativité afin d'apprendre d'avantage sur les différences (potentiellement existantes) entre les différentes caractéristiques de la base donnée avec la variable cible ( **`Survivived)`**
+
+**Existe-t-il des différences prix en fonction du statut ?**
+
+> Nous utilisons le test de `Kruskal-Wallis` pour évaluer s’il existe **des différences significatives dans la distribution des prix des billets (`Fare`) selon le statut de survie des passagers**. Le test permet de répondre à la question : **“Le prix du billet varie-t-il en fonction du fait qu’un passager ait survécu ou non ?”**
+
+```{r}
+ggstatsplot::ggbetweenstats(
+  data = df ,
+  title = "Comparaison des distributions des prix des billets en fonction du statut" ,
+  # caption =  ,
+  xlab = "Statut" ,
+  ylab ="Prix des billets"  ,
+  x = Survie_Na ,
+  y = Fare  ,
+  type = "non-parametric",
+  ggtheme = theme # deja construis 
+)+
+  scale_fill_viridis_d()
+```
+
+-   Le test de Kruskal-Wallis indique que les prix des billets diffèrent significativement selon le statut des passagers (p \< 0.001 )
+-   Les comparaisons par paires à l’aide du test de **`Dunn`**, avec correction de **`Holm`**, confirment des différences significatives entre chacun des groupes
+-   Cependant vu que l'effet $\hat{\epsilon}^2_{ordinal} = 0.07$ cela suggère que les différences existe bel et bien mais elles sont **modérées**.Ces différences sont statistiquement significatives, même après correction des p-values (méthode de [**`holm`**]{.underline}**)** pour comparaisons multiples
+
+Analysons maintenant si la distribution de l'âge en fonctions du statut est significativement différente ou pas , cela nous permettrait de savoir si l'age des individus ont pût influencer ou pas le statut des individus.
+
+Pour cela nous allons faire un test de **Welch**
+
+```{r}
+ ggstatsplot::ggbetweenstats(
+   x= Survived ,
+   type ="parametric",
+   y = Age ,
+   data = df
+ )
+```
+
+Les survivants avaient un **age moyen de 28.34 ans contre 30.63 ans** pour les non-survivants. Bien que la différence d’âge moyen soit faible, le test de **Welch** nous dit que la différence est significative (probabilité critique \< 5% mais \> 1%) . Cela suggère que **l’âge pourrait jouer un rôle modéré dans la probabilité de survie**. Toutefois, la **taille de l’effet**, mesurée par l’indice de `Hedges` $\hat{g}_{Hedges} = 0.16$ est considérée comme **faible** selon la règle de Cohen
+
+Nous allons maintenant analyser la relation entre la classe des passagers (`Pclass`) et leur probabilité de survie.
+
+```{r,warning=FALSE}
+A <- df |> 
+  count(Pclass,Survie_Na) |> 
+  group_by(Pclass)  |>
+  mutate(
+    total = sum(n),
+    pourcentage = n / total
+  ) |> 
+  ungroup() |> 
+  ggplot(aes(x=Pclass,y=n,fill=Survie_Na))+
+  geom_col()+
+  scale_fill_viridis_d()+
+  labs(y="Nombre de personnes",
+       subtitle = "Informations total",
+       x="Classe",
+       fill = "Statut",
+       title = "Répartition des classes en fonction du statut")+
+theme+ 
+  geom_text(
+    aes(label = scales::percent(pourcentage, accuracy = 1)),
+    position = position_stack(vjust = 0.5),
+    color = "gray65",
+    size = 4
+  )+
+  theme(legend.position = "top")
+  
+
+
+
+B <- df |> 
+  select(Pclass,Survived) |> 
+  na.omit() |> 
+  count(Pclass,Survived) |> 
+  group_by(Pclass)  |>
+  mutate(
+    total = sum(n),
+    pourcentage = n / total
+  ) |> 
+  ungroup() |> 
+  ggplot(aes(x=Pclass,y=n,fill=Survived))+
+  geom_col()+
+  scale_fill_manual(values = c("#440154FF" ,"#21908CFF" ))+
+  labs(y="Nombre de personnes",
+       subtitle  = "Zoom sur l'information connue",
+       title="",
+       x="Classe",
+       fill = "Statut")+
+theme+ 
+  geom_text(
+    aes(label = scales::percent(pourcentage, accuracy = 1)),
+    position = position_stack(vjust = 0.5),
+    color = "gray65",
+    size = 4
+  )+
+  theme(legend.position = "top")
+
+library(patchwork)
+
+gridExtra::grid.arrange(A,B,ncol=2)
+
+# viridis::viridis(3)
+# "#440154FF" "#21908CFF" "#FDE725FF"
+```
+
+D’après les données disponibles, on observe que les passagers de **1re classe** présentaient un **taux de survie nettement plus élevé** que ceux des classes inférieures.\
+En effet, **42 % des passagers de 1re classe ont survécu**, contre **31 % en 2e classe** et seulement **17 % en 3e classe**.
+
+À l’inverse, la **classe tertiaire (3e classe)** enregistre un **taux de mortalité particulièrement élevé** : **52 %**, contre **35 % en 2e classe** et seulement **25 % en 1re classe**.
+
+Ces chiffres suggèrent une possible **inégalité d’accès aux moyens de sauvetage** selon la classe sociale.\
+Cela soulève une **hypothèse importante** :
+
+> *Le fait d’appartenir à une classe supérieure augmente-t-il réellement les chances de survie, ou cette différence n’est-elle qu’un artefact dû à la **répartition déséquilibrée des passagers** entre les classes ?*
+
+Cette question justifie la mise en œuvre d’un **test statistique d’indépendance**, afin de déterminer si la variable `Pclass` est **statistiquement associée au statut de survie**, au-delà de simples différences d’effectifs.
+
+Cette analyse vise à déterminer si la **classe sociale des passagers**, représentée par la variable `Pclass`, a eu un **impact significatif sur leur probabilité de survie**. Comprendre cette relation permet d’**évaluer l’influence des inégalités sociales** dans les chances de survie lors du naufrage du Titanic.
+
+```{r}
+khi_deux <- chisq.test(table(df$Survived,df$Pclass)) 
+
+
+# pairwise_khi <- FSA::dunnTest(as.numeric(df$Survie_Na),df$Pclass)
+
+pairwise_khi <- rcompanion::pairwiseNominalIndependence(table(df$Pclass, df$Survived),
+                                        fisher = F,
+                                        method = "holm")
+
+cat("Le test de khi deux nous renvoie :")
+cat("")
+khi_deux
+
+cat("Les tests de significativités (post-hoc) par paires \n avec la méthode de fisher et un ajustement des probabilité critique avec la méthode de holm:")
+pairwise_khi |> pander::pander()
+
+```
+
+Afin d’identifier plus précisément les différences entre les classes de passagers, nous avons effectué des **comparaisons par paires** entre les modalités de la variable `Pclass`, à l’aide du **test post-hoc du Chi²** (`pairwiseNominalIndependence`), avec une **correction des p-values selon la méthode de Holm**.
+
+Les résultats montrent que :
+
+-   Il existe une **différence significative entre la 1re et la 2e classe** (**`p-value`** ≈ 0.001), indiquant une variation claire des taux de survie entre ces deux groupes.
+
+-   La **différence entre la 1re et la 3e classe est particulièrement marquée**, ce qui confirme l’hypothèse d’une **inégalité d’accès aux moyens de sauvetage**. Les passagers de 1re classe étaient probablement **mieux situés**, avec des cabines plus proches des **ponts supérieurs** ou des **canots de sauvetage**, facilitant leur évacuation.
+
+-   Un **écart significatif** est également observé entre la **2e et la 3e classe**, dans le même sens.
+
+> Ces résultats confirment que **la probabilité de survie varie significativement selon la classe du passager**. En particulier, les passagers de 1re classe ont un **taux de survie nettement supérieur** à ceux des 2e et 3e classes.
+>
+> Cela renforce l’hypothèse d’une **inégalité structurelle liée à la classe sociale**, influant sur les **conditions d’évacuation** et l’**accès aux dispositifs de sauvetage**, lors du naufrage du **`Titanic`**.
+
+#### Le taux de survie varie-t-il selon le port d’embarquement ?
+
+Autrement dit, la **probabilité de survie** des passagers du **`Titanic`** **dépend-elle du lieu depuis lequel ils ont embarqué** ? Cette question soulève la possibilité d’un **contexte géographique ou logistique** ayant influencé l’évacuation.
+
+Comme évoqué précédemment, environ **70 % des passagers ont embarqué à Southampton (Angleterre)**, **23 % à Cherbourg (France)**, et **9 % à Queenstown (Irlande)**.\
+L’objectif est maintenant de **calculer, pour chaque port**, le **taux de survie et le taux de décès** parmi les passagers, afin d’identifier d’éventuelles **disparités selon l’origine géographique**.
+
+```{r}
+df |>  filter(!is.na(df$Survived)) |> 
+  count(Embarked , Survived) |> 
+  group_by(Embarked) |> 
+  mutate(Total = sum(n),
+        percent = n / Total) |> 
+  ggplot(aes(x=reorder(Embarked,percent) , y = n , fill =Survived ))+
+  geom_col()+
+  scale_fill_viridis_d()+
+  labs(title = "Repartition du statut en fonction du port d'embarquement",
+       x = " Port d'embarquement " , 
+       y= "Nombre de personne")+
+  geom_text(aes(label = percent(percent)),
+            position = position_stack(vjust=0.5) , 
+            color = "gray65")+
+  theme
+```
+
+Le graphique ci-dessus montre que les taux de survie varient sensiblement selon le port d’embarquement.
+
+Les passagers ayant embarqué à **`Cherbourg (port C)`** présentent le taux de survie le plus élevé, avec 55,4 % de survivants — soit près d’une personne sur deux.
+
+À l’inverse, les passagers partis de **`Southampton (port S)`** affichent un taux de survie plus faible, à 33,8 %, tandis que ceux de **`Queenstown (port Q)`** atteignent 39 %.
+
+Ces écarts pourraient refléter des différences de statut social, de conditions d’embarquement ou encore de localisation à bord du navire selon le port d’origine.
+
+**Cependant** il est également important de noter que **le port de `Southampton` représentait plus de 70 % des embarquements**.
+
+Ainsi, même si son **taux de survie** est **plus faible** que celui observé à Cherbourg, cela peut aussi s’expliquer par le **nombre beaucoup plus important de passagers** ayant embarqué depuis ce port.\
+
+Cette surreprésentation **amplifie mécaniquement** l’impact des survivants et des victimes issus de **`Southampton`** dans les statistiques globales
+
+# [Gestion des Valeurs manquantes]{.underline}
+
+## [Gestion des valeurs manquantes]{.underline}
+
+La gestion des valeurs manquantes est une étape **essentielle en analyse de données**, car elle permet d’**affiner les résultats** en estimant des valeurs absentes de manière cohérente. Cela nous aide à nous rapprocher des **valeurs réelles** que l’on aurait pu observer dans la population ou l’échantillon étudié.
+
+Cependant, toutes les techniques d’imputation **ne garantissent pas la fiabilité** des résultats : chaque situation ou type de données nécessite **une méthode d’imputation adaptée**.
+
+Dans cette partie, nous allons tester **différentes stratégies d’imputation** afin de mieux gérer les données manquantes et d’**enrichir notre base de données**, dans le but d’améliorer les performances des modèles de machine learning
+
+```{r}
+Percent_NA <- round(
+                    colSums(is.na(df |> 
+                                   select(-c(Categorie_age,Survie_Na)) )
+                          )/nrow(df),4
+                    ) |> 
+  sort(decreasing = T)|>
+  as.data.frame()
+
+colnames(Percent_NA) <- "Pourcentage des données manquantes"
+
+Percent_NA |>
+  reactable::reactable()
+```
+
+Comment allons nous imputer la variable ***`Age`***?
+
+```{r}
+# gg_miss_var(df)
+```
+
+```{r}
+# micee <- mice(df, m = 1, seed = 123)
+# make.method(df)                 # pour voir les méthodes par défaut
+# df_imp <- complete(micee, 1)    # jeu de données complété
+# df$Age_mice <- df_imp$Age       # stocker la version imputée de Age
+# 
+library(mice)
+
+
+# 1. As-tu bien lancé l'imputation ?
+micee <- mice(df |> select(-c(Categorie_age,PassengerId,Survie_Na,Cabin)), m = 5, seed = 123)
+
+#extraction du dataset complet (imputé)
+df_imp <- complete(micee, 3)
+
+# 3. Est-ce qu'il reste des NA ?
+# colSums(is.na(df))  # te montre combien de NA par variable
+
+```
+
+```{r}
+# gg_miss_var(df)
+df$Age_median <- df$Age
+df$Age_moyen <-  df$Age
+df$Age_mice <-  df_imp$Age
+
+df$Age_median[is.na(df$Age_median)] <- median(df$Age,na.rm = T)
+df$Age_moyen[is.na(df$Age_moyen)] <- mean(df$Age,na.rm = T)
+
+
+```
+
+```{r}
+A <- df |> ggplot()+
+  geom_density(aes(x=Age  ,fill= "Age" ),alpha= 0.5)+
+  geom_density(aes(x= Age_median ,fill="Age_median"),alpha=0.5)+
+  geom_density(aes(x= Age_moyen ,fill="Age_moyen"),alpha=0.6)+
+  geom_density(aes(x= Age_mice ,fill="mice"),alpha= 0.3)+
+  scale_fill_brewer(name ="Distribution",palette = "Dark2")+
+  theme(legend.position = "top")
+
+
+B <-  df |> ggplot()+
+  geom_density(aes(x=Age,color="Age"  ),alpha=0.7,linewidth=1)+
+  geom_density(aes(x= Age_mice ,fill="Mice"),alpha=0.4)+
+  labs(subtitle = "Zoom sur la distribution")+
+   scale_fill_manual(values = Colors[1])+
+  theme(legend.position = "top")
+
+
+A + B
+```
+
+On remarque que les imputations par la moyenne et la médiane modifient la distribution des âges, contrairement à l’imputation réalisée avec `mice`. Cette dernière utilise une régression pour estimer les valeurs manquantes, puis sélectionne parmi les vraies valeurs observées celles qui sont les plus proches. Elle préserve ainsi l’allure générale de la distribution d’origine, sans l’aplatir artificiellement
+
+```{r}
+df <- df|>  select(- c(Age_median,Age_moyen)) # on nettoye un peu en supprimant  qlq variable initule pour la suite 
+```
+
+Intéressons nous sur la `Cabin`
+
+Ont pourrais être tenté de supprimé la variable `Cabin` car elle offre pas assez d'informations 77,46% des données sont manquantes .
+
+Avant de rentré en *`détails`* sur les technique adapter a cette variable ont doit comprendre comment elle est construite ?
+
+La variable **`Cabin`** indique la cabine attribuée à chaque passager, généralement composée d'une lettre représentant le pont du navire (**`Deck`**) suivie d’un numéro.
+
+Bien que cette variable contienne de nombreuses valeurs manquantes, l'information extraite du pont peut révéler des indices importants sur le statut social ou la position des passagers, et ainsi influencer leur probabilité de survie. (**`hypothèse`** )
+
+```{r}
+# df$Cabin_letter <- substr(df$Cabin, 1, 1) ou 
+df <- df |> mutate(Deck = str_sub(Cabin,start = 1, end = 1),
+                   Deck = as.factor(Deck))
+
+table(df$Deck_imp)
+
+```
+
+```{r}
+df_knn <- df |> 
+  select(Deck, Pclass, Fare, Sex, Embarked)  # variables explicatives
+
+```
+
+```{r}
+df_imp <- VIM::kNN(df_knn,
+                   variable = 'Deck',
+                   k=5 )
+```
+
+```{r}
+df$Deck_imp <-  df_imp$Deck
+```
+
+```{r}
+
+
+df |> count(Deck_imp , Pclass) |> 
+  group_by(Deck_imp) |> 
+  mutate(Total = sum(n),
+         percent = n /Total) |> 
+  ggplot(aes(x = Deck_imp ,y= n , fill = Pclass))+
+  geom_col()+
+  theme + 
+  labs(title = "Répartition des lettres de cabine (imputation KNN) \n en fonction de la  Classe" , 
+       x = "Lettre de la cabine", 
+       y = "Nombre de billet")+
+  scale_fill_viridis_d(name = "Classe") + 
+   geom_text(
+    aes(label = scales::percent(percent, accuracy = 1)),
+    position = position_stack(vjust = 0.7),
+    color = "gray39",
+    fontface="bold",
+    family="Segoe",
+    size = 1.9
+  )
+  
+```
+
+-   Après avoir fait l'amputation de la variable `Cabine` ont observe que les cabines A,B,E et C sont majoritairement constituer de passagers de classe 1
+-   La classe F est un mélange des classe 3 et 2
+-   Les résultats montrent que les cabines commençant par la lettre `G` sont exclusivement associées à la 3e classe.\
+    Ce constat est cohérent avec l'organisation spatiale du `Titanic`, où les passagers de 3e classe étaient logés dans les ponts les plus bas du navire, souvent proches des machines et des quartiers de l’équipage. (voir fin du rapport ) Cette observation renforce la **validité de l’imputation** et la **pertinence de la variable `Cabin` (ou de sa première lettre)** comme indicateur de la classe sociale à bord.
+
+Comme la variable `Deck_imp` est **étroitement liée à la classe (`Pclass`)** par construction (certaines lettres de cabines n’apparaissent que dans certaines classes), on peut supposer que **l’emplacement de la cabine pourrait avoir un effet indirect sur la probabilité de survie**.
+
+En effet, les lettres des ponts (`A`, `B`, ..., `G`) correspondent à la **stratification verticale du navire** :
+
+-   Le **pont A** se situe au niveau supérieur,
+
+-   Puis viennent les ponts **B**, **C**, jusqu’au **pont G**, situé au niveau inférieur.
+
+**Hypothèse** : *Les passagers logés dans les ponts supérieurs auraient eu un **accès facilité aux structures d’évacuation** (canots de sauvetage), ce qui pourrait expliquer un taux de survie plus élevé.*
+
+Le graphique ci-dessous montre que les **ponts B, C, D et E affichent des taux de survie élevés**, respectivement **64.8 %**, **56.8 %**, **71.7 %** et **75 %**.\
+Cette observation semble **confirmer en partie l’hypothèse**.
+
+Toutefois, le **pont A**, qui est pourtant le plus haut, **n’affiche pas un taux de survie particulièrement élevé**. Cela pourrai être dû par deux facteurs a mon avis :
+
+Certaines **cabines du pont A** étaient **éloignées des points d’évacuation**, notamment celles situées à l’arrière ou sur les côtés du navire ;
+
+Tous les passagers **n’ont pas réagi de la même manière** face à la panique ou aux ordres d’évacuation. L’attitude individuelle reste un facteur important.
+
+```{r}
+df[!is.na(df$Survived),] |>            # 1. On garde uniquement les lignes où la survie est connue
+  count(Deck_imp, Survived) |>         # 2. On compte le nombre de passagers par pont et par statut
+  group_by(Deck_imp) |>                # 3. On regroupe par pont
+  mutate(
+    Total = sum(n),                    # 4. On calcule le total de passagers par pont
+    pourcentage = n / Total            # 5. On calcule la proportion de survivants/non-survivants par pont
+  ) |> 
+  filter(Survived == 1) |> 
+  arrange(pourcentage) |> 
+  ggplot(aes(x = reorder(Deck_imp,pourcentage) , y = pourcentage))+
+  geom_col(fill = "#440154FF")+
+  scale_y_continuous(labels = scales::label_percent())+
+  geom_text(aes(label = scales::percent(pourcentage)),
+            vjust = 1.5 , 
+            color = "gray65")+
+  labs(
+    title = " Taux de survie par Cabine (pont)" ,
+    x = "Pont" 
+  )+
+  theme 
+
+
+```
+
+On note également que les passagers logés dans les **ponts inférieurs**, notamment **F** et **G**, présentent des **taux de survie inférieurs à 45 %**.\
+Cette observation **renforce l’idée** que la **position des quartiers dans le navire** a pu jouer un rôle **discriminant dans l’accès aux moyens de sauvetage**.
+
+Afin de **vérifier cette hypothèse**, nous allons réaliser un **test statistique d’indépendance** entre les variables `Deck_imp` et `Survived`, afin de déterminer si la répartition du taux de survie **dépend significativement du pont occupé**.
+
+```{r}
+
+# df[-which(df$Deck_imp=="T"),] # c'est pour trouver la position des ponts T
+df <-  df[-which(df$Deck_imp=="T"),] # on eélève le pont T car elle est inexistantil y'a que deux occurence (il est important de l'élevé  du fait que les test de khi² devient tres vite instable lorsque qu 'une cellule est < 5 occurence)
+df$Deck_imp <- droplevels(df$Deck_imp) # il faut supprimer le niveaux car meme si on supprime l'element T le niveau est tjr conserveconservé 
+df$Deck <- droplevels(df$Deck)
+
+
+cat("Le test de khi² nous renvoie :\n")
+cat("------------------------------------------------------------------------------------------")
+chisq.test(
+  table(
+    df$Deck_imp,
+    df$Survived
+  )
+)
+t <-  rcompanion::cramerV(df$Deck_imp , df$Survived)
+cat("L'intensité de cette rélation mesuré par la methode de V crammér nous donne", as.numeric(t),"\n")
+cat("------------------------------------------------------------------------------------------")
+
+
+```
+
+Le **test du Chi² d’indépendance** a été réalisé pour évaluer l’association entre le **pont (`Deck_imp`)** occupé par les passagers et leur **statut de survie (`Survived`)**.
+
+Le résultat du test est le suivant :
+
+Étant donné que la **p-value** est **très largement inférieure à 0.001**, le test est **hautement significatif**.\
+Cela signifie qu’il existe une **relation statistiquement significative entre le pont et la survie**.\
+En d’autres termes, la **répartition des taux de survie varie significativement selon le pont occupé** par les passagers, ce qui **soutient l’hypothèse selon laquelle la position verticale dans le navire a pu influencer les chances de survie**.
+
+L’**intensité** de cette association, mesurée à l’aide de la **V de Cramér**, est de **0.2223**.\
+Cela correspond à une **association modérée**, suggérant que **la position verticale dans le navire (le pont) a eu un impact non négligeable sur les chances de survie**.
+
+La variable **`Fare & Embarked`** contiennent peut de valeur manquantes resp (1 et 2 ) ont va juste les enlevés
+
+# Conclusion EDA
+
+Cette analyse exploratoire nous a permis de **mieux comprendre la structure, la qualité et les grandes tendances du jeu de données Titanic**.\
+
+L’exploration des données a mis en évidence plusieurs **inégalités marquantes** dans les chances de survie des passagers.\
+Les **femmes** présentaient un **taux de survie nettement plus élevé** que les hommes, et les passagers de **1re classe** survivaient davantage que ceux des classes inférieures.\
+De même, les passagers ayant embarqué à **Cherbourg** affichaient une meilleure probabilité de survie, ce qui suggère des **différences sociales ou d’emplacement à bord** selon le port d’embarquement.\
+La variable `Fare` était **fortement asymétrique**, avec une majorité de petits montants, mais quelques billets très chers, associés à des conditions de voyage plus favorables.\
+Enfin, l’âge semble jouer un rôle modéré, avec une **légère tendance à la survie chez les jeunes enfants et les jeunes adultes**, mais des disparités moins marquées dans les tranches d’âge plus élevées.
+Les **tests statistiques** effectués (Chi², test de Welch, V de Cramér…) ont confirmé que plusieurs de ces variables présentent une **association significative** avec la variable cible `Survived`, ce qui justifie leur **prise en compte dans la phase de modélisation** à venir.\
+
+```{r}
+
+df <- df[-which(is.na(df$Embarked) | is.na(df$Fare)),] # supprime les lignes où Fare & embarked ont des valeurs manquantes
+# colSums(is.na(df)) verification 
+```
+
+### [source & credit]{.underline}
+
+T[itanic - L’apprentissage automatique à partir d’un désastre \| Kaggle](https://www.kaggle.com/c/titanic/data) [ici](https://www.kaggle.com/c/titanic/data "jeu de donnée")
+
+[Naufrage du Titanic — Wikipédia](https://fr.wikipedia.org/wiki/Naufrage_du_Titanic)
+
+[Échafaudage en coupe de l’Olympic et du Titanic diagram.png - Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Olympic_%26_Titanic_cutaway_diagram.png)
+
+[Différence entre l’asymétrie et l’aplatissement \| GeeksforGeeks](https://www.geeksforgeeks.org/difference-between-skewness-and-kurtosis/)
+
+[photo introduction](https://www.google.com/imgres?imgurl=https://preview.redd.it/yzntfr5k4qre1.jpeg?width%3D640%26crop%3Dsmart%26auto%3Dwebp%26s%3D34965064f764a21bc31ed1b70ca258d231254e45&tbnid=RbLtP2lTKC3o8M&vet=1&imgrefurl=https://www.reddit.com/r/titanic/comments/1jn0scz/chat_gpt_ghibli_style_titanic/?tl%3Dfr&docid=sZNThHr0b672TM&w=640&h=426&itg=1&hl=fr-us&source=sh/x/im/m1/3&kgs=4bf48847522292a9)
+
+[![](images/clipboard-3478795282.png){fig-align="center" width="791" height="706"}](https://www.alamy.com/stock-photo/titanic-diagram.html)
+
+\
+
+```{r}
+# imputed <- mice(df_knn, m = 6, seed = 123,method = meth)
+# dd <- complete(imputed,2)
+# # make.method(df_knn)
+# # # Créer la liste des méthodes d’imputation
+# # meth <- make.method(df_knn)
+# # 
+# # # Appliquer la méthode "logreg" à la variable Sex
+# # meth["Sex"] <- "logreg"
+
 ```
